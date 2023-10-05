@@ -51,21 +51,6 @@ def setup(hass: HomeAssistant, config: ConfigType) -> bool:
         overwrite = service.data.get(ATTR_OVERWRITE)
         threading.Thread(target=do_download, args=(url, subdir, filename, overwrite)).start()
 
-    def do_download(url, subdir, filename, overwrite):
-        """Download the file."""
-        try:
-            filename = resolve_filename(url, filename)
-            final_path = create_final_path(download_path, subdir, filename, overwrite)
-            _LOGGER.debug("%s -> %s", url, final_path)
-            download_and_save_file(url, final_path)
-            _LOGGER.debug("Downloading of %s done", url)
-            hass.bus.fire(
-                f"{DOMAIN}_{DOWNLOAD_COMPLETED_EVENT}",
-                {"url": url, "filename": filename},
-            )
-        except (requests.exceptions.ConnectionError, ValueError) as e:
-            handle_download_failure(url, filename, final_path, e)
-
     hass.services.register(
         DOMAIN,
         SERVICE_DOWNLOAD_FILE,
@@ -73,6 +58,21 @@ def setup(hass: HomeAssistant, config: ConfigType) -> bool:
         schema=SERVICE_DOWNLOAD_FILE_SCHEMA,
     )
     return True
+
+def do_download(url, subdir, filename, overwrite):
+    """Download the file."""
+    try:
+        filename = resolve_filename(url, filename)
+        final_path = create_final_path(download_path, subdir, filename, overwrite)
+        _LOGGER.debug("%s -> %s", url, final_path)
+        download_and_save_file(url, final_path)
+        _LOGGER.debug("Downloading of %s done", url)
+        hass.bus.fire(
+            f"{DOMAIN}_{DOWNLOAD_COMPLETED_EVENT}",
+            {"url": url, "filename": filename},
+        )
+    except (requests.exceptions.ConnectionError, ValueError) as e:
+        handle_download_failure(url, filename, final_path, e)
 
 def resolve_filename(url, filename):
     """Resolve the filename to use for the downloaded file."""
@@ -88,12 +88,9 @@ def resolve_filename(url, filename):
 
 def create_final_path(download_path, subdir, filename, overwrite):
     """Create the final path for the downloaded file."""
-    if subdir:
-        subdir_path = os.path.join(download_path, subdir)
-        os.makedirs(subdir_path, exist_ok=True)
-        final_path = os.path.join(subdir_path, filename)
-    else:
-        final_path = os.path.join(download_path, filename)
+    subdir_path = os.path.join(download_path, subdir) if subdir else download_path
+    os.makedirs(subdir_path, exist_ok=True)
+    final_path = os.path.join(subdir_path, filename)
 
     if not overwrite:
         final_path = ensure_unique_filename(final_path)
